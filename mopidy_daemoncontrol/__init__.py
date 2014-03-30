@@ -4,7 +4,7 @@ import os
 
 from mopidy import config, ext
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 __url__ = 'https://github.com/MetalMichael/mopidy-daemoncontrol'
 
 class Extension(ext.Extension):

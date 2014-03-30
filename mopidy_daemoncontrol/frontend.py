@@ -26,21 +26,20 @@ class DaemonControlFrontend(pykka.ThreadingActor, CoreListener):
             r = requests.get('http://' + self.hostname + '/' + parameters['action'])
         except (requests.ConnectionError, requests.Timeout):
             logger.error('DaemonController Error: Cannot connect to ' + self.hostname)
-            sys.exit(1)
+            process.exit_process()
         except requests.HTTPError:
             logger.error('DaemonController Error: HTTP error')
-            sys.exit(1)
+            process.exit_process()
         return r
         
     def on_start(self):
         req = self.make_request({'action': 'status'})
         if not req or req.text != 'running':
-            print req.url
             logger.error('DaemonController Error: There is not a radio currently running')
-            sys.exit(1)
+            process.exit_process()
             return
         logger.info('DaemonController: Found running radio')
-        self.core.playback.set_consume(True)
+        self.core.tracklist.consume = True
         self.track_playback_ended('starting','')
         
     def on_stop(self):
@@ -51,11 +50,12 @@ class DaemonControlFrontend(pykka.ThreadingActor, CoreListener):
         logger.info('DaemonController: Playback started');
         
     def track_playback_ended(self, tl_track, time_position):
-        logger.info('DaemonController: Playback ended')
+        if not tl_track == 'starting':
+            logger.info('DaemonController: Playback ended')
         
-        if(self.core.playback.get_current_tl_track().get() is None):
+        if(self.core.tracklist.length.get() == 0):
             logger.info('DaemonController: no track next. Looking up...')
-            req = self.make_request({'action': 'getsong'})
+            req = self.make_request({'action': 'status/getsong'})
             if(req.text == "empty"):
                 logger.info("DaemonController: no songs, trying again in 10s")
                 self.time = Timer(10, self.track_playback_ended, ('restarting', ''))
@@ -70,8 +70,7 @@ class DaemonControlFrontend(pykka.ThreadingActor, CoreListener):
                 self.track_playback_ended('retrying','')
                 return
                 
-            tlid = self.core.tracklist.add(track).get()
-            tl_tracks = self.core.tracklist.filter(tlid=tlid[0].tlid).get()
+            tl_tracks = self.core.tracklist.add(uri=req.text, at_position=0).get()
             self.core.playback.play(tl_tracks[0]).get()
         else:
             logger.info('DaemonController: Queued track found. Not looking up')
